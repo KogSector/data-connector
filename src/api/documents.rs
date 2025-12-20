@@ -199,9 +199,8 @@ pub async fn upload_document(
     while let Some(item) = payload.next().await {
         let mut field = item.map_err(|e| AppError::BadRequest(format!("Multipart error: {}", e)))?;
         
-        let content_disposition = field.content_disposition();
-        let filename = content_disposition
-            .get_filename()
+        let filename = field.content_disposition()
+            .and_then(|cd| cd.get_filename())
             .unwrap_or("unknown")
             .to_string();
         

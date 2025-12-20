@@ -5,6 +5,7 @@ pub mod data_sources;
 pub mod documents;
 pub mod local_sync;
 pub mod github_app;
+pub mod response;
 
 use actix_web::web;
 

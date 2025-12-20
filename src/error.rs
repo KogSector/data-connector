@@ -36,19 +36,22 @@ impl fmt::Display for AppError {
 
 impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
-        let (status, error_type) = match self {
-            AppError::BadRequest(_) => (actix_web::http::StatusCode::BAD_REQUEST, "bad_request"),
-            AppError::Unauthorized(_) => (actix_web::http::StatusCode::UNAUTHORIZED, "unauthorized"),
-            AppError::Forbidden(_) => (actix_web::http::StatusCode::FORBIDDEN, "forbidden"),
-            AppError::NotFound(_) => (actix_web::http::StatusCode::NOT_FOUND, "not_found"),
-            AppError::Internal(_) => (actix_web::http::StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-            AppError::ExternalService(_) => (actix_web::http::StatusCode::BAD_GATEWAY, "external_service_error"),
-            AppError::Validation(_) => (actix_web::http::StatusCode::UNPROCESSABLE_ENTITY, "validation_error"),
+        let (status, error_code) = match self {
+            AppError::BadRequest(_) => (actix_web::http::StatusCode::BAD_REQUEST, "BAD_REQUEST"),
+            AppError::Unauthorized(_) => (actix_web::http::StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+            AppError::Forbidden(_) => (actix_web::http::StatusCode::FORBIDDEN, "FORBIDDEN"),
+            AppError::NotFound(_) => (actix_web::http::StatusCode::NOT_FOUND, "NOT_FOUND"),
+            AppError::Internal(_) => (actix_web::http::StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
+            AppError::ExternalService(_) => (actix_web::http::StatusCode::BAD_GATEWAY, "EXTERNAL_SERVICE_ERROR"),
+            AppError::Validation(_) => (actix_web::http::StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION_ERROR"),
         };
 
+        // Use standardized response format: {success, data, error, code}
         HttpResponse::build(status).json(serde_json::json!({
-            "error": error_type,
-            "message": self.to_string()
+            "success": false,
+            "data": null,
+            "error": self.to_string(),
+            "code": error_code
         }))
     }
 }

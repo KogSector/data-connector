@@ -13,8 +13,12 @@ pub struct Config {
     pub database_url: Option<String>,
     /// Default local sync path
     pub local_sync_path_default: Option<String>,
-    /// JWT secret for token validation (optional - when not validating locally)
+    /// JWT secret for token validation (HS256 - development mode)
     pub jwt_secret: Option<String>,
+    /// Path to JWT public key PEM file (RS256 - production mode)
+    pub jwt_public_key_path: Option<String>,
+    /// Internal API key for S2S authentication with auth-service
+    pub internal_api_key: Option<String>,
 }
 
 impl Config {
@@ -32,6 +36,8 @@ impl Config {
             database_url: env::var("DATABASE_URL").ok(),
             local_sync_path_default: env::var("LOCAL_SYNC_PATH_DEFAULT").ok(),
             jwt_secret: env::var("JWT_SECRET").ok(),
+            jwt_public_key_path: env::var("JWT_PUBLIC_KEY_PATH").ok(),
+            internal_api_key: env::var("INTERNAL_API_KEY").ok(),
         }
     }
 

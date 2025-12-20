@@ -7,6 +7,70 @@ use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
+/// Filtering options for GitHub sync.
+#[derive(Debug, Clone, Default)]
+pub struct SyncOptions {
+    /// Only include files with these extensions (e.g., ["rs", "md", "py"])
+    pub include_languages: Vec<String>,
+    /// Exclude files matching these path patterns (regex-like)
+    pub exclude_paths: Vec<String>,
+    /// Maximum file size in MB to fetch
+    pub max_file_size_mb: Option<f64>,
+}
+
+impl SyncOptions {
+    /// Parse from a DataSource config JSON.
+    pub fn from_config(config: &serde_json::Value) -> Self {
+        let include_languages = config.get("include_languages")
+            .or_else(|| config.get("file_extensions"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        
+        let exclude_paths = config.get("exclude_paths")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        
+        let max_file_size_mb = config.get("max_file_size_mb")
+            .and_then(|v| v.as_f64());
+        
+        Self {
+            include_languages,
+            exclude_paths,
+            max_file_size_mb,
+        }
+    }
+
+    /// Check if a file path should be included based on filters.
+    pub fn should_include(&self, path: &str, file_size: Option<u64>) -> bool {
+        // Check file size limit
+        if let (Some(max_mb), Some(size)) = (self.max_file_size_mb, file_size) {
+            let max_bytes = (max_mb * 1024.0 * 1024.0) as u64;
+            if size > max_bytes {
+                return false;
+            }
+        }
+        
+        // Check exclude patterns
+        for pattern in &self.exclude_paths {
+            if path.contains(pattern) {
+                return false;
+            }
+        }
+        
+        // Check include languages (if specified)
+        if !self.include_languages.is_empty() {
+            let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+            if !self.include_languages.iter().any(|lang| lang.to_lowercase() == ext) {
+                return false;
+            }
+        }
+        
+        true
+    }
+}
+
 /// GitHub connector for fetching repository content.
 pub struct GitHubConnector {
     auth_client: Arc<AuthClient>,
@@ -75,6 +139,20 @@ impl GitHubConnector {
         };
         Some(lang.to_string())
     }
+
+    /// Check if file should be skipped (binary files).
+    fn is_binary_file(path: &str) -> bool {
+        let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+        matches!(ext.as_str(), 
+            "png" | "jpg" | "jpeg" | "gif" | "ico" | "svg" | "webp" | "bmp" |
+            "woff" | "woff2" | "ttf" | "eot" | "otf" |
+            "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
+            "zip" | "tar" | "gz" | "rar" | "7z" |
+            "exe" | "dll" | "so" | "dylib" | "bin" |
+            "mp3" | "mp4" | "wav" | "avi" | "mov" | "mkv" |
+            "db" | "sqlite" | "lock"
+        )
+    }
 }
 
 #[async_trait]
@@ -99,6 +177,11 @@ impl Connector for GitHubConnector {
     async fn fetch_content(&self, source: &DataSource, user_id: Uuid) -> AppResult<Vec<NormalizedDocument>> {
         info!("Fetching content from GitHub for source {}", source.id);
         
+        // Parse filtering options from config
+        let options = SyncOptions::from_config(&source.config);
+        info!("Sync options: include_languages={:?}, exclude_paths={:?}, max_file_size_mb={:?}",
+            options.include_languages, options.exclude_paths, options.max_file_size_mb);
+        
         // Get OAuth token from auth service
         let token = self.auth_client.get_oauth_token("github", user_id).await?;
         
@@ -115,16 +198,22 @@ impl Connector for GitHubConnector {
         let files = self.github_client.get_repo_tree(&token, repo, branch).await?;
         
         let mut documents = Vec::new();
+        let mut skipped_count = 0;
         
         for file in files {
-            // Skip non-blob entries and binary files
+            // Skip non-blob entries
             if file.file_type != "blob" {
                 continue;
             }
             
-            // Skip likely binary files
-            let ext = file.path.rsplit('.').next().unwrap_or("");
-            if matches!(ext, "png" | "jpg" | "jpeg" | "gif" | "ico" | "svg" | "woff" | "woff2" | "ttf" | "eot" | "pdf" | "zip" | "tar" | "gz" | "exe" | "dll" | "so" | "dylib") {
+            // Skip binary files
+            if Self::is_binary_file(&file.path) {
+                continue;
+            }
+            
+            // Apply sync options filtering
+            if !options.should_include(&file.path, file.size) {
+                skipped_count += 1;
                 continue;
             }
             
@@ -157,7 +246,9 @@ impl Connector for GitHubConnector {
             }
         }
         
-        info!("Fetched {} documents from GitHub repository {}", documents.len(), repo);
+        info!("Fetched {} documents from GitHub repository {} (skipped {} due to filters)", 
+            documents.len(), repo, skipped_count);
         Ok(documents)
     }
 }
+

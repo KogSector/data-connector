@@ -47,7 +47,10 @@ async fn main() -> std::io::Result<()> {
     info!("Chunker service URL: {}", config.chunker_service_url);
 
     // Initialize clients
-    let auth_client = Arc::new(AuthClient::new(config.auth_service_url.clone()));
+    let auth_client = Arc::new(AuthClient::with_api_key(
+        config.auth_service_url.clone(),
+        config.internal_api_key.clone(),
+    ));
     let chunker_client = Arc::new(ChunkerClient::new(config.chunker_service_url.clone()));
     let github_client = Arc::new(GitHubApiClient::new());
 
@@ -68,7 +71,7 @@ async fn main() -> std::io::Result<()> {
 
     // Start HTTP server
     HttpServer::new(move || {
-        // Configure CORS for local development
+        // Configure CORS for local development and production
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
             .allowed_origin("http://localhost:3001")
@@ -81,7 +84,9 @@ async fn main() -> std::io::Result<()> {
                 actix_web::http::header::AUTHORIZATION,
                 actix_web::http::header::ACCEPT,
                 actix_web::http::header::CONTENT_TYPE,
+                actix_web::http::header::HeaderName::from_static("x-correlation-id"),
             ])
+            .supports_credentials()  // Enable Access-Control-Allow-Credentials: true
             .max_age(3600);
 
         App::new()
