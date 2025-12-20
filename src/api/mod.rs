@@ -33,19 +33,27 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/api/repositories")
             .route("/oauth/check", web::post().to(repositories::check_oauth))
             .route("/oauth/branches", web::get().to(repositories::get_branches_oauth))
+            .route("/fetch-branches", web::post().to(repositories::fetch_branches))
             .route("", web::get().to(repositories::list_repositories))
     );
     
-    // Data sources endpoints
+    // Data sources endpoints (primary under /api/data)
     cfg.service(
         web::scope("/api/data")
             .route("/sources", web::post().to(data_sources::create_source))
             .route("/sources", web::get().to(data_sources::list_sources))
+            .route("/sources/{id}/sync", web::post().to(data_sources::sync_source))
             .route("/local/sync", web::post().to(local_sync::sync_local))
     );
     
-    // Alias for data sources
-    cfg.route("/api/data-sources", web::get().to(data_sources::list_sources));
+    // Data sources endpoints (alternative under /api/data-sources)
+    cfg.service(
+        web::scope("/api/data-sources")
+            .route("", web::get().to(data_sources::list_sources))
+            .route("/connect", web::post().to(data_sources::connect_source))
+            .route("/{id}", web::get().to(data_sources::get_source))
+            .route("/{id}", web::delete().to(data_sources::delete_source))
+    );
     
     // Documents endpoints
     cfg.service(
@@ -73,3 +81,4 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/jobs/{job_id}/execute", web::post().to(github_app::execute_job))
     );
 }
+

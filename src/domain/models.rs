@@ -13,6 +13,8 @@ pub enum ConnectorType {
     GoogleDrive,
     Dropbox,
     Slack,
+    Notion,
+    Confluence,
     UrlScraper,
 }
 
@@ -26,6 +28,8 @@ impl std::fmt::Display for ConnectorType {
             ConnectorType::GoogleDrive => write!(f, "google_drive"),
             ConnectorType::Dropbox => write!(f, "dropbox"),
             ConnectorType::Slack => write!(f, "slack"),
+            ConnectorType::Notion => write!(f, "notion"),
+            ConnectorType::Confluence => write!(f, "confluence"),
             ConnectorType::UrlScraper => write!(f, "url_scraper"),
         }
     }
@@ -139,6 +143,8 @@ pub struct DataSource {
     pub connector_type: ConnectorType,
     pub config: serde_json::Value,
     pub status: SyncStatus,
+    pub sync_status: SyncStatus,
+    pub documents_count: u32,
     pub last_synced_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -154,6 +160,8 @@ impl DataSource {
             connector_type,
             config,
             status: SyncStatus::Pending,
+            sync_status: SyncStatus::Pending,
+            documents_count: 0,
             last_synced_at: None,
             created_at: now,
             updated_at: now,

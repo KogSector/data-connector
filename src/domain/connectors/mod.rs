@@ -68,6 +68,9 @@ impl ConnectorManager {
             )),
             ConnectorType::UrlScraper => Box::new(url_scraper::UrlScraperConnector::new()),
             ConnectorType::LocalFile => Box::new(local_file::LocalFileConnector::new()),
+            // Notion and Confluence - use placeholder connectors for now
+            ConnectorType::Notion => Box::new(url_scraper::UrlScraperConnector::new()),
+            ConnectorType::Confluence => Box::new(url_scraper::UrlScraperConnector::new()),
         }
     }
 }
