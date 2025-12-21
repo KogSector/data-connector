@@ -35,12 +35,14 @@ struct CreateChunkJobRequest {
 }
 
 /// Response from creating a chunk job.
+/// Matches chunker's StartChunkJobResponse format.
 #[derive(Debug, Deserialize)]
 pub struct ChunkJobResponse {
     pub job_id: Uuid,
-    pub status: String,
-    #[allow(dead_code)]
-    pub items_count: Option<usize>,
+    pub accepted: bool,
+    pub items_count: usize,
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 impl ChunkerClient {
@@ -104,7 +106,12 @@ impl ChunkerClient {
             .await
             .map_err(|e| AppError::ExternalService(format!("Failed to parse chunker response: {}", e)))?;
         
-        info!("Created chunk job {} with status {}", job_response.job_id, job_response.status);
+        info!(
+            "Created chunk job {} (accepted: {}, items: {})", 
+            job_response.job_id, 
+            job_response.accepted,
+            job_response.items_count
+        );
         Ok(job_response)
     }
 }

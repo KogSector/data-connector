@@ -57,12 +57,41 @@ impl Default for ContentType {
 }
 
 /// Source kinds for the chunker service.
+/// Must match the chunker service's SourceKind enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceKind {
+    /// Code repository (GitHub, GitLab, etc.)
     CodeRepo,
+    /// Generic document (PDF, Word, etc.)
     Document,
+    /// Chat/messaging (Slack, Teams, Discord)
     Chat,
+    /// Ticketing system (Jira, Linear, GitHub Issues)
+    Ticketing,
+    /// Wiki pages (Notion, Confluence)
+    Wiki,
+    /// Email threads
+    Email,
+    /// Web pages
+    Web,
+    /// Unknown or other sources
+    Other,
+}
+
+impl std::fmt::Display for SourceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceKind::CodeRepo => write!(f, "code_repo"),
+            SourceKind::Document => write!(f, "document"),
+            SourceKind::Chat => write!(f, "chat"),
+            SourceKind::Ticketing => write!(f, "ticketing"),
+            SourceKind::Wiki => write!(f, "wiki"),
+            SourceKind::Email => write!(f, "email"),
+            SourceKind::Web => write!(f, "web"),
+            SourceKind::Other => write!(f, "other"),
+        }
+    }
 }
 
 /// A chunk of a document (optional, chunker owns real chunking).

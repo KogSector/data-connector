@@ -120,7 +120,12 @@ impl SyncOrchestrator {
             | crate::domain::ConnectorType::GitLab 
             | crate::domain::ConnectorType::Bitbucket => SourceKind::CodeRepo,
             crate::domain::ConnectorType::Slack => SourceKind::Chat,
-            _ => SourceKind::Document,
+            crate::domain::ConnectorType::Notion 
+            | crate::domain::ConnectorType::Confluence => SourceKind::Wiki,
+            crate::domain::ConnectorType::UrlScraper => SourceKind::Web,
+            crate::domain::ConnectorType::GoogleDrive 
+            | crate::domain::ConnectorType::Dropbox 
+            | crate::domain::ConnectorType::LocalFile => SourceKind::Document,
         };
 
         chunker_client.create_chunk_job(source.id, source_kind, documents).await?;
