@@ -49,7 +49,7 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:3017".to_string()),
             embedding_service_url: env::var("EMBEDDING_SERVICE_URL")
                 .unwrap_or_else(|_| "http://localhost:8082".to_string()),
-            graph_service_url: env::var("GRAPH_SERVICE_URL")
+            graph_service_url: env::var("RELATION_GRAPH_SERVICE_URL")
                 .unwrap_or_else(|_| "http://localhost:3018".to_string()),
             embedding_enabled: env::var("EMBEDDING_ENABLED")
                 .map(|v| v.to_lowercase() == "true")
