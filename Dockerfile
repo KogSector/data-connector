@@ -1,50 +1,59 @@
-# Build stage
-FROM rust:1.75-slim AS builder
+# Python Data Connector Service
+# Multi-stage build for smaller production image
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y pkg-config libssl-dev && \
-    rm -rf /var/lib/apt/lists/*
+# Stage 1: Builder
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create dummy source to cache dependencies
-RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Build dependencies only (this layer will be cached)
-RUN cargo build --release || true
+# Stage 2: Runtime
+FROM python:3.11-slim as runtime
 
-# Copy actual source
-COPY src ./src
-
-# Build the application
-RUN cargo build --release
-
-# Runtime stage - minimal image
-FROM debian:bookworm-slim
+WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y ca-certificates libssl3 curl && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create app user for security
-RUN useradd -m -u 1001 appuser
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/data-service /usr/local/bin/data-service
+# Copy application code
+COPY app/ ./app/
+COPY connectors/ ./connectors/
+COPY db/ ./db/
+COPY routes/ ./routes/
+COPY services/ ./services/
+COPY workers/ ./workers/
+COPY pyproject.toml .
 
-# Switch to non-root user
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 3013
+# Environment variables
+ENV PORT=3013
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3013/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-CMD ["data-service"]
+# Expose port
+EXPOSE 3013
+
+# Default command: run the FastAPI server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3013"]

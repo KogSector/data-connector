@@ -1,210 +1,189 @@
-# Data Service
+# ConHub Data Connector Service
 
-ConHub's data ingestion microservice providing connector-based content fetching from multiple sources.
+Python FastAPI implementation of the data connector service for syncing content from various sources (GitHub, local files, cloud storage, etc.) to the ConHub knowledge platform.
 
 ## Features
 
-- **Connector Framework**: Fetch content from GitHub, GitLab, Bitbucket, Google Drive, Dropbox, Slack, URLs, and local files
-- **Sync Orchestration**: Background sync jobs with status tracking
-- **OAuth Integration**: Retrieves provider tokens from auth-service
-- **Downstream Pipeline**: Triggers chunker service for content processing
-- **Document Management**: Upload, search, and manage documents
+- **Multi-source connectors**: GitHub, GitLab, Google Drive, Dropbox, OneDrive, Slack, Notion, Confluence, local files
+- **Background sync**: Celery workers for async sync operations
+- **PostgreSQL persistence**: Full state management with SQLAlchemy ORM
+- **Webhook support**: Real-time updates from provider webhooks
+- **Chunker integration**: Automatic chunking of synced content
+- **OAuth flows**: Built-in OAuth handling for providers
 
 ## Quick Start
 
 ### Prerequisites
 
-- Rust 1.70+ (install from https://rustup.rs)
+- Python 3.11+
+- PostgreSQL 15+
+- Redis 7+
 
-### Running Locally
+### Local Development
 
-```powershell
-# Clone and navigate to the project
-cd data-connector
+1. **Install dependencies:**
+   ```bash
+   pip install -e ".[dev]"
+   ```
 
-# Run in development mode
-cargo run
-```
+2. **Start services with Docker:**
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d db redis minio
+   ```
 
-The server starts on `http://localhost:3013` by default.
+3. **Run database migrations:**
+   ```bash
+   alembic upgrade head
+   ```
 
-### Environment Variables
+4. **Start the API server:**
+   ```bash
+   uvicorn app.main:app --reload --port 3013
+   ```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3013` | Server port |
-| `AUTH_SERVICE_URL` | `http://localhost:3010` | Auth service for OAuth tokens |
-| `CHUNKER_SERVICE_URL` | `http://localhost:3012` | Chunker service for processing |
-| `DATABASE_URL` | - | Optional PostgreSQL connection |
-| `JWT_SECRET` | - | JWT validation secret (optional for dev) |
-| `LOCAL_SYNC_PATH_DEFAULT` | - | Default path for local file sync |
-| `GITHUB_APP_NAME` | `conhub-data-connector` | GitHub App name |
+5. **Start Celery worker (in another terminal):**
+   ```bash
+   celery -A workers.celery_app worker --loglevel=info
+   ```
 
-### Example Requests
+### Using Docker Compose
 
-#### Health Check
-```powershell
-curl http://localhost:3013/health
-# Response: {"status":"ok"}
-```
+```bash
+# Start all services
+docker-compose -f docker-compose.dev.yml up -d
 
-#### Status
-```powershell
-curl http://localhost:3013/status
-# Response: {"service":"data-service","version":"0.1.0","status":"running","uptime_seconds":123}
-```
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f api
 
-#### Create GitHub Data Source (OAuth)
-```powershell
-curl -X POST http://localhost:3013/api/data/sources `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer <jwt_token>" `
-  -d '{
-    "name": "My Repository",
-    "type": "github",
-    "config": {
-      "repository": "owner/repo",
-      "branch": "main"
-    }
-  }'
-```
-
-#### List Data Sources
-```powershell
-curl http://localhost:3013/api/data/sources `
-  -H "Authorization: Bearer <jwt_token>"
-```
-
-#### Upload Document
-```powershell
-curl -X POST http://localhost:3013/api/documents/upload `
-  -H "Authorization: Bearer <jwt_token>" `
-  -F "file=@path/to/document.md"
-```
-
-#### Create Document
-```powershell
-curl -X POST http://localhost:3013/api/documents `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer <jwt_token>" `
-  -d '{
-    "name": "example.md",
-    "content": "# Hello World",
-    "content_type": "markdown"
-  }'
-```
-
-#### List Documents
-```powershell
-curl http://localhost:3013/api/documents `
-  -H "Authorization: Bearer <jwt_token>"
-```
-
-#### Search Documents
-```powershell
-curl "http://localhost:3013/api/documents?search=hello" `
-  -H "Authorization: Bearer <jwt_token>"
-```
-
-#### Local Filesystem Sync
-```powershell
-curl -X POST http://localhost:3013/api/data/local/sync `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer <jwt_token>" `
-  -d '{
-    "path": "C:/Users/me/projects/mycode",
-    "name": "My Local Code"
-  }'
-```
-
-#### GitHub Sync (OAuth)
-```powershell
-curl -X POST http://localhost:3013/api/github/sync `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer <jwt_token>" `
-  -d '{
-    "repository": "owner/repo",
-    "branch": "main"
-  }'
+# Stop services
+docker-compose -f docker-compose.dev.yml down
 ```
 
 ## API Endpoints
 
-### Health & Status
+### Health
 - `GET /health` - Health check
-- `GET /status` - Detailed status
+- `GET /status` - Extended status
 
-### GitHub (Legacy - token in body)
-- `POST /api/github/validate-access` - Validate repo access
-- `POST /api/github/sync-repository` - Sync repository
-- `POST /api/github/branches` - Get branches
-- `POST /api/github/languages` - Get languages
+### Connectors
+- `POST /connectors` - Create connector
+- `GET /connectors` - List connectors
+- `GET /connectors/{id}` - Get connector details
+- `DELETE /connectors/{id}` - Delete connector
+- `POST /connectors/{id}/test` - Test connection
 
-### GitHub (OAuth - token from auth-service)
-- `POST /api/github/sync` - Sync repository
+### OAuth
+- `GET /connectors/{id}/oauth/start` - Initiate OAuth
+- `GET /connectors/{id}/oauth/callback` - OAuth callback
 
-### Repository Helpers
-- `POST /api/repositories/oauth/check` - Check OAuth access
-- `GET /api/repositories/oauth/branches` - Get branches
-- `GET /api/repositories` - List user repositories
+### Sync
+- `POST /connectors/{id}/sync` - Trigger sync
+- `GET /connectors/{id}/status` - Get sync status
 
-### Data Sources
-- `POST /api/data/sources` - Create data source
-- `GET /api/data/sources` - List data sources
-- `GET /api/data-sources` - Alias
+### Webhooks
+- `POST /webhook/{connector}` - Receive provider webhooks
+- `POST /data-connector/chunker-callbacks` - Chunker callbacks
 
-### Documents
-- `POST /api/documents` - Create document
-- `GET /api/documents` - List/search documents
-- `DELETE /api/documents/{id}` - Delete document
-- `GET /api/documents/analytics` - Get analytics
-- `POST /api/documents/upload` - Upload file
-- `POST /api/documents/import` - Cloud import (stub)
-- `GET /api/documents/cloud/files` - List cloud files (stub)
+### Legacy (Backward Compatibility)
+- `/api/github/*` - Legacy GitHub endpoints
+- `/api/data/*` - Legacy data source endpoints
+- `/api/data-sources/*` - Alternative data source endpoints
 
-### Local Sync
-- `POST /api/data/local/sync` - Sync local directory
+## Configuration
 
-### GitHub App
-- `GET /api/connectors/github/app/install-url` - Get install URL
-- `GET /api/connectors/github/app/callback` - OAuth callback
-- `GET /api/connectors/github/app/installations` - List installations
-- `GET /api/connectors/github/app/{installation_id}/repos` - List repos
-- `POST /api/connectors/github/app/{installation_id}/repos` - Configure repos
-- `GET /api/connectors/github/app/{installation_id}/repos/selected` - Get selected
-- `POST /api/connectors/github/app/repos/{repo_config_id}/sync` - Sync repo
-- `GET /api/connectors/github/app/jobs/{job_id}` - Get job status
-- `POST /api/connectors/github/app/jobs/{job_id}/execute` - Execute job
+Environment variables (see `.env` for defaults):
 
-## Architecture
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | 3013 |
+| `DATABASE_URL` | PostgreSQL connection | postgresql://... |
+| `REDIS_URL` | Redis connection | redis://localhost:6379 |
+| `AUTH_SERVICE_URL` | Auth service URL | http://localhost:3010 |
+| `CHUNKER_SERVICE_URL` | Chunker service URL | http://localhost:3017 |
+| `EMBEDDING_ENABLED` | Enable embeddings | true |
+| `GRAPH_RAG_ENABLED` | Enable graph RAG | true |
+
+## Project Structure
 
 ```
-src/
-├── main.rs              # Entry point
-├── config.rs            # Environment configuration
-├── error.rs             # Error types
-├── api/                 # HTTP handlers
-├── domain/              # Business logic
-│   ├── models.rs        # Data models
-│   ├── connectors/      # Connector implementations
-│   └── sync.rs          # Sync orchestration
-├── clients/             # External service clients
-├── storage/             # Persistence layer
-└── middleware/          # JWT middleware
+data-connector/
+├── app/                    # FastAPI application
+│   ├── main.py            # App factory
+│   ├── config.py          # Settings
+│   ├── schemas.py         # Pydantic models
+│   └── exceptions.py      # Custom exceptions
+├── connectors/            # Connector implementations
+│   ├── base.py           # Abstract base class
+│   ├── github.py         # GitHub connector
+│   ├── local_file.py     # Local file connector
+│   └── registry.py       # Connector factory
+├── db/                    # Database layer
+│   ├── models.py         # SQLAlchemy models
+│   └── session.py        # Session management
+├── routes/                # API routes
+│   ├── connectors.py     # CRUD endpoints
+│   ├── sync.py           # Sync endpoints
+│   ├── oauth.py          # OAuth endpoints
+│   ├── webhooks.py       # Webhook endpoints
+│   └── legacy.py         # Backward compatibility
+├── services/              # Business logic
+│   ├── chunker_client.py # Chunker HTTP client
+│   └── sync_service.py   # Sync orchestrator
+├── workers/               # Celery tasks
+│   ├── celery_app.py     # Celery configuration
+│   └── sync_tasks.py     # Background tasks
+├── tests/                 # Test suite
+├── pyproject.toml        # Project config
+├── requirements.txt      # Dependencies
+├── Dockerfile            # Container image
+└── docker-compose.dev.yml # Local dev stack
 ```
 
-## Connector Types
+## Testing
 
-| Type | Status | Description |
-|------|--------|-------------|
-| `github` | ✅ Full | GitHub repositories |
-| `local_file` | ✅ Full | Local filesystem |
-| `gitlab` | 🔲 Stub | GitLab repositories |
-| `bitbucket` | 🔲 Stub | Bitbucket repositories |
-| `google_drive` | 🔲 Stub | Google Drive documents |
-| `dropbox` | 🔲 Stub | Dropbox files |
-| `slack` | 🔲 Stub | Slack messages |
-| `url_scraper` | 🔲 Stub | Web page scraping |
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov=connectors --cov=services
+
+# Run specific tests
+pytest tests/test_connectors/ -v
+```
+
+## Development
+
+### Adding a New Connector
+
+1. Create `connectors/<provider>.py` extending `BaseConnector`
+2. Implement required methods: `authorize`, `list_items`, `fetch_item`
+3. Register in `connectors/registry.py`
+4. Add OAuth URLs if applicable in `routes/oauth.py`
+
+### Database Migrations
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback
+alembic downgrade -1
+```
+
+## Migration from Rust
+
+This service is a Python port of the original Rust data-connector. Key differences:
+
+- **Framework**: Actix-web → FastAPI
+- **Storage**: In-memory → PostgreSQL
+- **Background tasks**: tokio::spawn → Celery
+- **HTTP client**: reqwest → httpx
+
+The API endpoints are backward compatible with the Rust implementation.
 
 ## License
 

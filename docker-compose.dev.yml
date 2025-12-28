@@ -1,0 +1,131 @@
+# Docker Compose for Local Development
+# Includes: FastAPI app, PostgreSQL, Redis, MinIO
+
+version: "3.8"
+
+services:
+  # Data Connector API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3013:3013"
+    environment:
+      - PORT=3013
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/data_connector
+      - REDIS_URL=redis://redis:6379/0
+      - AUTH_SERVICE_URL=http://host.docker.internal:3010
+      - CHUNKER_SERVICE_URL=http://host.docker.internal:3017
+      - EMBEDDING_SERVICE_URL=http://host.docker.internal:8082
+      - RELATION_GRAPH_SERVICE_URL=http://host.docker.internal:3018
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET_NAME=data-connector-blobs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./connectors:/app/connectors
+      - ./db:/app/db
+      - ./routes:/app/routes
+      - ./services:/app/services
+      - ./workers:/app/workers
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Celery Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A workers.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/data_connector
+      - REDIS_URL=redis://redis:6379/0
+      - CHUNKER_SERVICE_URL=http://host.docker.internal:3017
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./connectors:/app/connectors
+      - ./db:/app/db
+      - ./services:/app/services
+      - ./workers:/app/workers
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Celery Beat (scheduler)
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A workers.celery_app beat --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app/workers
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=data_connector
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
