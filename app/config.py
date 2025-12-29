@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     jwt_secret: Optional[str] = None
     jwt_public_key_path: Optional[str] = None
     internal_api_key: Optional[str] = None
+    conhub_auth_public_key: Optional[str] = None  # For ConHub internal token verification
+    
+    # Chunk Storage Configuration (Ephemeral-First)
+    chunk_store_mode: str = "ephemeral"  # ephemeral | mongo-ttl | postgres
+    chunk_ttl_days: int = 7
+    mongodb_uri: Optional[str] = None
+    
+    # Neo4j Configuration (Unified Vector + Graph Storage)
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: Optional[str] = None
+    neo4j_vector_dimension: int = 1024  # Jina embeddings v3 dimension
     
     # S3/MinIO Configuration
     s3_endpoint_url: Optional[str] = None

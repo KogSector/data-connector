@@ -178,6 +178,73 @@ class BaseConnector(ABC):
         """
         raise NotImplementedError(f"{self.connector_type} does not support delta sync")
     
+    async def fetch_incremental(
+        self,
+        cursor: str,
+    ) -> tuple[list[NormalizedDocument], Optional[str]]:
+        """
+        Fetch only changed content since the given cursor.
+        
+        This is the preferred method for incremental sync as it returns
+        normalized documents ready for chunking.
+        
+        Args:
+            cursor: Previous sync cursor (format varies by connector).
+            
+        Returns:
+            Tuple of (documents, new_cursor). new_cursor should be saved
+            for the next incremental sync.
+            
+        Note:
+            Default implementation uses delta_sync and fetches changed items.
+            Connectors can override for more efficient implementation.
+        """
+        from uuid import uuid4
+        from datetime import datetime, timezone
+        
+        try:
+            changes, new_cursor = await self.delta_sync(cursor)
+        except NotImplementedError:
+            # Fallback to full sync if delta_sync not implemented
+            docs = await self.fetch_all_content()
+            return docs, None
+        
+        documents = []
+        for change in changes:
+            if change.change_type == "deleted":
+                # Skip deleted items - caller should handle deletions
+                continue
+            
+            try:
+                content = await self.fetch_item(change.item_id)
+                
+                now = datetime.now(timezone.utc)
+                doc = NormalizedDocument(
+                    id=uuid4(),
+                    source_id=self.connector_id or uuid4(),
+                    connector_type=self.connector_type,
+                    external_id=change.item_id,
+                    name=change.item.name if change.item else change.item_id,
+                    path=change.item.path if change.item else None,
+                    content=content.content,
+                    content_type=content.content_type,
+                    metadata=change.item.metadata if change.item else {},
+                    language=content.language,
+                    created_at=now,
+                    updated_at=now,
+                )
+                documents.append(doc)
+            except Exception as e:
+                import structlog
+                logger = structlog.get_logger(__name__)
+                logger.warning(
+                    "Failed to fetch changed item",
+                    item_id=change.item_id,
+                    error=str(e),
+                )
+        
+        return documents, new_cursor
+    
     async def fetch_all_content(self) -> list[NormalizedDocument]:
         """
         Convenience method to fetch all content from the source.
