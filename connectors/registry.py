@@ -107,8 +107,17 @@ def get_connector(
             connector_id=connector_id,
         )
     
-    elif connector_type in (ConnectorType.GITLAB, ConnectorType.BITBUCKET):
-        # Git repository stubs
+    elif connector_type == ConnectorType.GITLAB:
+        from connectors.gitlab import GitLabConnector
+        return GitLabConnector(
+            config=config,
+            tenant_id=tenant_id,
+            connector_id=connector_id,
+            access_token=access_token,
+        )
+    
+    elif connector_type == ConnectorType.BITBUCKET:
+        # Git repository stub (Bitbucket)
         return StubConnector(
             connector_type=connector_type,
             config=config,
@@ -117,8 +126,17 @@ def get_connector(
             source_kind=SourceKind.CODE_REPO,
         )
     
-    elif connector_type in (ConnectorType.GOOGLE_DRIVE, ConnectorType.DROPBOX, ConnectorType.ONEDRIVE):
-        # Cloud storage stubs
+    elif connector_type == ConnectorType.GOOGLE_DRIVE:
+        from connectors.google_drive import GoogleDriveConnector
+        return GoogleDriveConnector(
+            config=config,
+            tenant_id=tenant_id,
+            connector_id=connector_id,
+            access_token=access_token,
+        )
+    
+    elif connector_type in (ConnectorType.DROPBOX, ConnectorType.ONEDRIVE):
+        # Cloud storage stubs (Dropbox, OneDrive)
         return StubConnector(
             connector_type=connector_type,
             config=config,
