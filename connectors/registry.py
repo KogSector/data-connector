@@ -117,13 +117,12 @@ def get_connector(
         )
     
     elif connector_type == ConnectorType.BITBUCKET:
-        # Git repository stub (Bitbucket)
-        return StubConnector(
-            connector_type=connector_type,
+        from connectors.bitbucket import BitbucketConnector
+        return BitbucketConnector(
             config=config,
             tenant_id=tenant_id,
             connector_id=connector_id,
-            source_kind=SourceKind.CODE_REPO,
+            access_token=access_token,
         )
     
     elif connector_type == ConnectorType.GOOGLE_DRIVE:
@@ -135,14 +134,22 @@ def get_connector(
             access_token=access_token,
         )
     
-    elif connector_type in (ConnectorType.DROPBOX, ConnectorType.ONEDRIVE):
-        # Cloud storage stubs (Dropbox, OneDrive)
-        return StubConnector(
-            connector_type=connector_type,
+    elif connector_type == ConnectorType.DROPBOX:
+        from connectors.dropbox import DropboxConnector
+        return DropboxConnector(
             config=config,
             tenant_id=tenant_id,
             connector_id=connector_id,
-            source_kind=SourceKind.DOCUMENT,
+            access_token=access_token,
+        )
+    
+    elif connector_type == ConnectorType.ONEDRIVE:
+        from connectors.onedrive import OneDriveConnector
+        return OneDriveConnector(
+            config=config,
+            tenant_id=tenant_id,
+            connector_id=connector_id,
+            access_token=access_token,
         )
     
     elif connector_type == ConnectorType.SLACK:
