@@ -1,227 +1,152 @@
-# Data Connector Documentation
+# ConFuse Data Connector
 
-## Overview
+> Data Ingestion Service for the ConFuse Knowledge Intelligence Platform
 
-The data-connector service is ConFuse's data ingestion layer. It connects to external data sources (GitHub, GitLab, Google Drive, etc.), handles webhooks, and triggers the knowledge processing pipeline.
+## What is this service?
 
-## Role in ConFuse
+The **data-connector** is ConFuse's data ingestion layer. It connects to external data sources (GitHub, GitLab, Google Drive, etc.), manages OAuth tokens, handles webhooks for real-time updates, and orchestrates the knowledge processing pipeline.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        EXTERNAL DATA SOURCES                         │
-│  GitHub  │  GitLab  │  Bitbucket  │  G Drive  │  Dropbox  │  Local  │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │ OAuth tokens / API access
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     DATA-CONNECTOR (This Service)                    │
-│                            Port: 8000                                │
-│                                                                      │
-│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐              │
-│   │ Connectors  │   │  Webhooks   │   │   Workers   │              │
-│   │             │   │             │   │             │              │
-│   │ • GitHub    │   │ • Push      │   │ • Sync      │              │
-│   │ • GitLab    │   │ • PR/MR     │   │ • Process   │              │
-│   │ • G Drive   │   │ • File chg  │   │ • Queue     │              │
-│   │ • Dropbox   │   │             │   │             │              │
-│   │ • Local FS  │   │             │   │             │              │
-│   └─────────────┘   └─────────────┘   └─────────────┘              │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │ Normalized content
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      KNOWLEDGE PIPELINE                              │
-│  code-normalize-fetch → chunker → embeddings → relation-graph       │
-└─────────────────────────────────────────────────────────────────────┘
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/confuse/data-connector.git
+cd data-connector
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+
+# Run database migrations
+alembic upgrade head
+
+# Start development server
+uvicorn app.main:app --reload --port 8000
 ```
 
-## Supported Sources
+The server starts at `http://localhost:8000`.
 
-| Source | Status | Features |
-|--------|--------|----------|
-| GitHub | ✅ Ready | Repos, PRs, Issues, Wikis |
-| GitLab | ✅ Ready | Projects, MRs, Issues |
-| Bitbucket | ✅ Ready | Repos, PRs |
-| Google Drive | ✅ Ready | Docs, Sheets, PDFs |
-| Dropbox | 🚧 WIP | Files, folders |
-| OneDrive | 📋 Planned | Files, folders |
-| Notion | 📋 Planned | Pages, databases |
-| Confluence | 📋 Planned | Spaces, pages |
-| Local FS | ✅ Ready | Local directories |
-| Slack | 📋 Planned | Channels, threads |
-| Jira | 📋 Planned | Issues, projects |
+## Documentation
 
-## API Endpoints
+| Document | Description |
+|----------|-------------|
+| [Architecture](architecture.md) | System design and data flows |
+| [API Reference](api-reference.md) | Complete endpoint documentation |
+| [Configuration](configuration.md) | Environment variables |
+| [Connectors](connectors.md) | Supported data sources |
+| [Integration](integration.md) | How it connects to other services |
+| [Webhooks](webhooks.md) | Webhook handling guide |
+| [Development](development.md) | Local development setup |
+| [Troubleshooting](troubleshooting.md) | Common issues |
 
-### Sources
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/sources` | GET | List connected sources |
-| `/sources` | POST | Connect new source |
-| `/sources/:id` | GET | Get source details |
-| `/sources/:id` | DELETE | Disconnect source |
-| `/sources/:id/sync` | POST | Trigger manual sync |
-| `/sources/:id/status` | GET | Get sync status |
-
-### Webhooks
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/webhooks/github` | POST | GitHub webhook receiver |
-| `/webhooks/gitlab` | POST | GitLab webhook receiver |
-| `/webhooks/bitbucket` | POST | Bitbucket webhook receiver |
-| `/webhooks/gdrive` | POST | Google Drive push notifications |
-
-### Admin
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/admin/jobs` | GET | List processing jobs |
-| `/admin/jobs/:id` | GET | Get job status |
-| `/admin/stats` | GET | Service statistics |
-
-## Connection Flow
-
-### 1. GitHub Repository Connection
+## How It Fits in ConFuse
 
 ```
-User                    Frontend                Data-Connector           GitHub
- │                         │                         │                      │
- │ Click "Connect GitHub"  │                         │                      │
- │────────────────────────>│                         │                      │
- │                         │ GET /sources/github/auth│                      │
- │                         │────────────────────────>│                      │
- │                         │                         │ OAuth redirect       │
- │ <────────────────────────────────────────────────────────────────────────>
- │                         │                         │                      │
- │ Select repos            │                         │                      │
- │────────────────────────>│                         │                      │
- │                         │ POST /sources           │                      │
- │                         │ {type: github, repos}   │                      │
- │                         │────────────────────────>│                      │
- │                         │                         │ Setup webhooks       │
- │                         │                         │─────────────────────>│
- │                         │                         │<─────────────────────│
- │                         │                         │                      │
- │                         │                         │ Initial sync job     │
- │                         │                         │────────>             │
- │                         │                         │                      │
- │ Source connected!       │                         │                      │
- │<────────────────────────│                         │                      │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         EXTERNAL DATA SOURCES                                │
+│   GitHub  │  GitLab  │  Bitbucket  │  G Drive  │  Dropbox  │  Local FS     │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │ OAuth / API / Webhooks
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      DATA-CONNECTOR (This Service)                           │
+│                              Port: 8000                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                 │
+│   │  Connectors  │    │   Webhooks   │    │   Workers    │                 │
+│   │              │    │              │    │              │                 │
+│   │ • GitHub     │    │ • Push       │    │ • Sync       │                 │
+│   │ • GitLab     │    │ • PR/MR      │    │ • Process    │                 │
+│   │ • Bitbucket  │    │ • File chg   │    │ • Embed      │                 │
+│   │ • G Drive    │    │ • Comment    │    │ • Index      │                 │
+│   │ • Dropbox    │    │              │    │              │                 │
+│   │ • Local FS   │    │              │    │              │                 │
+│   └──────────────┘    └──────────────┘    └──────────────┘                 │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │                         Job Queue (Redis)                             │  │
+│   │   Manages async processing of sync and indexing jobs                  │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │ Normalized content
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         KNOWLEDGE PIPELINE                                   │
+│   code-normalize-fetch → chunker → embeddings → relation-graph              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Webhook Processing
+## Key Features
 
+### 1. Multi-Source Connectivity
+- GitHub repositories, PRs, issues, wikis
+- GitLab projects, merge requests
+- Bitbucket repositories
+- Google Drive documents, sheets, presentations
+- Dropbox files and folders
+- Local filesystem directories
+
+### 2. Real-Time Sync via Webhooks
+- Receive push events from Git providers
+- Incremental updates (only changed files)
+- PR/MR tracking and indexing
+- Automatic re-indexing on changes
+
+### 3. OAuth Token Management
+- Secure token storage (encrypted)
+- Automatic token refresh
+- Multi-provider support
+- Scoped access
+
+### 4. Async Job Processing
+- Redis-backed job queue
+- Retry with exponential backoff
+- Job status tracking
+- Failure notifications
+
+## Technology Stack
+
+| Technology | Purpose |
+|------------|---------|
+| Python 3.11+ | Runtime |
+| FastAPI | Web framework |
+| SQLAlchemy | ORM |
+| Alembic | Migrations |
+| PostgreSQL | Data storage |
+| Redis | Job queue |
+| httpx | Async HTTP client |
+| Celery | Background workers |
+
+## Database Schema
+
+Key tables:
+
+```sql
+sources          -- Connected data sources
+files            -- Indexed files
+sync_jobs        -- Sync job history
+webhook_events   -- Received webhooks
+oauth_tokens     -- Provider access tokens
 ```
-GitHub                  Data-Connector           Code-Normalize-Fetch    Pipeline
-  │                          │                           │                  │
-  │ POST /webhooks/github    │                           │                  │
-  │ {push event}             │                           │                  │
-  │─────────────────────────>│                           │                  │
-  │                          │ Verify signature          │                  │
-  │                          │ Parse changed files       │                  │
-  │                          │                           │                  │
-  │                          │ POST /process             │                  │
-  │                          │ {files, tokens}           │                  │
-  │                          │──────────────────────────>│                  │
-  │                          │                           │ Fetch, parse     │
-  │                          │                           │───────>          │
-  │                          │                           │                  │
-  │                          │                           │ Normalized files │
-  │                          │<──────────────────────────│                  │
-  │                          │                           │                  │
-  │                          │ Send to chunker           │                  │
-  │                          │─────────────────────────────────────────────>│
-  │                          │                           │                  │
-  │ 200 OK                   │                           │                  │
-  │<─────────────────────────│                           │                  │
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `8000` |
-| `DATABASE_URL` | PostgreSQL connection | Required |
-| `REDIS_URL` | Redis for job queue | Required |
-| `CODE_NORMALIZE_FETCH_URL` | Code processing service | `http://localhost:8090` |
-| `CHUNKER_URL` | Chunking service | `http://localhost:3002` |
-| `GITHUB_APP_ID` | GitHub App ID | - |
-| `GITHUB_PRIVATE_KEY` | GitHub App private key | - |
-| `GOOGLE_CLIENT_ID` | Google OAuth client | - |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth secret | - |
-
-### Source Configuration
-
-```json
-{
-  "type": "github",
-  "config": {
-    "owner": "my-org",
-    "repo": "my-repo",
-    "branch": "main",
-    "includePaths": ["src/**", "docs/**"],
-    "excludePaths": ["node_modules/**", "*.lock"],
-    "languages": ["python", "rust", "typescript"]
-  }
-}
-```
-
-## Job Queue
-
-Data-connector uses a Redis-backed job queue for async processing:
-
-```python
-# Job types
-JOB_TYPES = {
-    "sync.full": "Full repository sync",
-    "sync.incremental": "Incremental sync (changed files only)",
-    "sync.file": "Single file processing",
-    "webhook.push": "Process push webhook",
-    "webhook.pr": "Process PR/MR webhook",
-}
-
-# Job status
-JOB_STATUS = {
-    "queued": "Waiting to be processed",
-    "running": "Currently processing",
-    "completed": "Successfully completed",
-    "failed": "Failed with error",
-}
-```
-
-## Data Flow
-
-```
-Source File → data-connector → code-normalize-fetch → chunker → embeddings → relation-graph
-     │              │                   │                │           │            │
-     │              │                   │                │           │            │
-   Raw content   Filter/skip       Parse AST         Segment      Vectorize    Store
-                 Check cache      Extract entities   Add context              Link
-```
-
-## File Filtering
-
-Files are filtered at multiple stages:
-
-1. **Size limit**: Files > 1MB skipped
-2. **Binary detection**: Binary files skipped
-3. **Path patterns**: Configurable include/exclude
-4. **Language filter**: Only process specified languages
-5. **Vendor directories**: node_modules, vendor, etc. excluded
-
-## Retention Policy
-
-See [RETENTION_POLICY.md](../RETENTION_POLICY.md) for data retention details.
 
 ## Related Services
 
-| Service | Relationship |
-|---------|--------------|
-| code-normalize-fetch | Receives files for code processing |
-| chunker | Receives normalized content for segmentation |
-| auth-middleware | OAuth token management |
-| api-backend | Source management API |
+| Service | Port | Relationship |
+|---------|------|--------------|
+| auth-middleware | 3001 | OAuth token management, API key validation |
+| code-normalize-fetch | 8090 | Sends code files for preprocessing |
+| chunker | 3002 | Sends normalized content for chunking |
+| api-backend | 3003 | Source management API |
+| relation-graph | 3018 | Sends entities for graph storage |
+
+## License
+
+MIT - ConFuse Team
